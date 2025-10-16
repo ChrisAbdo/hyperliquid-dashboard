@@ -194,11 +194,15 @@ export default function HypeDashboard() {
 
       <div className="max-w-[1600px] mx-auto">
         {/* Header */}
-        <div className="text-center mb-8 border-b pb-4">
-          <div className="flex items-center justify-center gap-4 mb-4">
+        <div className="mb-8 border-b pb-4">
+          <div className="flex justify-between items-center mb-2">
             <h1 className="text-2xl tracking-[0.3em]">
               {selectedCoin} TRADING OVERVIEW
             </h1>
+            <ModeSwitcher />
+          </div>
+          <div className="flex justify-between items-end">
+            <p className="text-sm text-muted-foreground">Last Update {formatDate()}</p>
             <Select value={selectedCoin} onValueChange={setSelectedCoin}>
               <SelectTrigger className="w-[220px]">
                 <SelectValue placeholder="Select coin" />
@@ -211,9 +215,7 @@ export default function HypeDashboard() {
                 ))}
               </SelectContent>
             </Select>
-            <ModeSwitcher />
           </div>
-          <p className="text-sm text-muted-foreground">Last Update {formatDate()}</p>
         </div>
 
         {/* Main Grid */}
