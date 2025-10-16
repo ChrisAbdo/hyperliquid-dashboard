@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Select,
   SelectContent,
@@ -9,6 +9,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ModeSwitcher } from "@/components/mode-switcher";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 interface Trade {
   coin: string;
@@ -51,6 +60,9 @@ export default function HypeDashboard() {
   const [recentPrices, setRecentPrices] = useState<
     Array<{ price: number; tid: number; time: number }>
   >([]);
+  const [graphData, setGraphData] = useState<
+    Array<{ time: string; price: number; timestamp: number }>
+  >([]);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -59,6 +71,7 @@ export default function HypeDashboard() {
     setPreviousPrice("0");
     setPriceChange(0);
     setRecentPrices([]);
+    setGraphData([]);
     setStats({ buys: 0, sells: 0, volume: 0, high: 0, low: 0 });
 
     const ws = new WebSocket("wss://api.hyperliquid.xyz/ws");
@@ -105,6 +118,25 @@ export default function HypeDashboard() {
               },
             ];
             return updated.slice(-20);
+          });
+
+          setGraphData((prev) => {
+            const now = newTrades[0].time;
+            const timeStr = new Date(now).toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+              hour12: false,
+            });
+            const updated = [
+              ...prev,
+              {
+                time: timeStr,
+                price: Number.parseFloat(latestPrice),
+                timestamp: now,
+              },
+            ];
+            return updated.slice(-50);
           });
         }
       }
@@ -183,6 +215,24 @@ export default function HypeDashboard() {
       ? (stats.buys / (stats.buys + stats.sells)) * 100
       : 50;
   const sellPressure = 100 - buyPressure;
+
+  const xTicks = useMemo(() => {
+    if (graphData.length <= 6) {
+      return graphData.map((point) => point.time);
+    }
+
+    const step = Math.ceil(graphData.length / 6);
+    const ticks = graphData
+      .filter((_, index) => index % step === 0)
+      .map((point) => point.time);
+
+    const last = graphData[graphData.length - 1]?.time;
+    if (last && ticks[ticks.length - 1] !== last) {
+      ticks.push(last);
+    }
+
+    return ticks;
+  }, [graphData]);
 
   return (
     <div className="min-h-screen font-mono p-6 relative">
@@ -439,6 +489,106 @@ export default function HypeDashboard() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Live Price Graph */}
+        <div className="border border-border p-6 mt-6">
+          <h2 className="text-lg mb-6 border-b border-border pb-2">
+            Live Price Graph (Since Load)
+          </h2>
+
+          {graphData.length < 2 ? (
+            <div className="h-[300px] flex items-center justify-center text-muted-foreground text-sm">
+              <div>
+                <div>&gt; Collecting price data...</div>
+                <div>&gt; Graph will render with at least 2 data points</div>
+                <div>&gt; Current points: {graphData.length}</div>
+              </div>
+            </div>
+          ) : (
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={graphData}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="var(--border)"
+                    strokeOpacity={0.3}
+                  />
+                  <XAxis
+                    dataKey="time"
+                    stroke="var(--muted-foreground)"
+                    fontSize={10}
+                    tickLine={false}
+                    ticks={xTicks}
+                    tickMargin={8}
+                  />
+                  <YAxis
+                    stroke="var(--muted-foreground)"
+                    fontSize={10}
+                    tickLine={false}
+                    domain={["auto", "auto"]}
+                    tickFormatter={(value) => `$${value.toFixed(2)}`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "var(--background)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "0",
+                      fontSize: "12px",
+                      fontFamily: "monospace",
+                    }}
+                    labelStyle={{
+                      color: "var(--muted-foreground)",
+                      marginBottom: "4px",
+                    }}
+                    formatter={(value: number) => [
+                      `$${value.toFixed(4)}`,
+                      "Price",
+                    ]}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="price"
+                    stroke="var(--foreground)"
+                    strokeWidth={2}
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {graphData.length >= 2 && (
+            <div className="mt-4 grid grid-cols-3 gap-4 text-xs">
+              <div className="border border-border p-3 text-center">
+                <div className="text-muted-foreground mb-1">DATA POINTS</div>
+                <div className="font-bold">{graphData.length}</div>
+              </div>
+              <div className="border border-border p-3 text-center">
+                <div className="text-muted-foreground mb-1">INITIAL PRICE</div>
+                <div className="font-bold">${graphData[0].price.toFixed(4)}</div>
+              </div>
+              <div className="border border-border p-3 text-center">
+                <div className="text-muted-foreground mb-1">CHANGE</div>
+                <div
+                  className={`font-bold ${
+                    graphData[graphData.length - 1].price >= graphData[0].price
+                      ? "text-green-500"
+                      : "text-destructive"
+                  }`}
+                >
+                  {graphData[graphData.length - 1].price >= graphData[0].price
+                    ? "▲"
+                    : "▼"}{" "}
+                  $
+                  {Math.abs(
+                    graphData[graphData.length - 1].price - graphData[0].price,
+                  ).toFixed(4)}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
